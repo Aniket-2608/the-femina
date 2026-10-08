@@ -15,7 +15,7 @@ export const AdminInventoryPage: React.FC = () => {
   const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
   const [selectedVariantId, setSelectedVariantId] = useState('');
   const [delta, setDelta] = useState<number>(0);
-  const [adjType, setAdjType] = useState('AUDIT_ADJUSTMENT');
+  const [adjType, setAdjType] = useState('MANUAL_ADJUSTMENT');
   const [reason, setReason] = useState('');
 
   const { data: ledgerData, isLoading: isLedgerLoading } = useGetInventoryLedgerQuery({
@@ -68,14 +68,16 @@ export const AdminInventoryPage: React.FC = () => {
     }
   };
 
-  const getBadgeVariant = (type: string) => {
+  const getBadgeVariant = (type?: string) => {
     switch (type) {
       case 'PURCHASE_INWARD':
       case 'RETURN_RESTOCK':
         return 'success';
-      case 'ORDER_RESERVATION':
-      case 'ORDER_FULFILLMENT':
+      case 'ORDER_RESERVED':
+      case 'ORDER_FULFILLED':
+      case 'ORDER_CANCELLED':
         return 'warning';
+      case 'DAMAGED_WRITEOFF':
       case 'DAMAGE_WRITE_OFF':
       case 'THEFT_LOSS':
         return 'error';
@@ -150,41 +152,50 @@ export const AdminInventoryPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 font-sans">
-                {ledgerData.data.map((tx: any) => (
-                  <tr key={tx._id} className="hover:bg-gray-50/50">
-                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
-                      {new Date(tx.createdAt).toLocaleString('en-IN', {
-                        dateStyle: 'medium',
-                        timeStyle: 'short',
-                      })}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{tx.sku}</div>
-                      <div className="text-xs text-gray-500 truncate max-w-[200px]">
-                        {tx.variantId?.productId?.name || tx.productId?.name || 'Luxury Ensemble'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Badge variant={getBadgeVariant(tx.transactionType)}>
-                        {tx.transactionType.replace(/_/g, ' ')}
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-4 font-mono font-semibold">
-                      <span className={tx.deltaQuantity > 0 ? 'text-emerald-600' : 'text-rose-600'}>
-                        {tx.deltaQuantity > 0 ? `+${tx.deltaQuantity}` : tx.deltaQuantity}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 font-mono font-medium text-gray-900">
-                      {tx.newQuantity}
-                    </td>
-                    <td className="px-6 py-4 text-xs text-gray-600 max-w-[220px]">
-                      {tx.reason || tx.referenceOrder || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 text-xs text-gray-500">
-                      {tx.performedBy?.fullName || tx.performedBy?.email || 'System'}
-                    </td>
-                  </tr>
-                ))}
+                {ledgerData.data.map((tx: any) => {
+                  const txType = tx.type || tx.transactionType || 'MANUAL_ADJUSTMENT';
+                  const deltaQty = tx.quantityDelta ?? tx.deltaQuantity ?? 0;
+                  const balanceAfter = tx.newStock ?? tx.newQuantity ?? 0;
+                  const operatorName = tx.performedBy?.firstName
+                    ? `${tx.performedBy.firstName} ${tx.performedBy.lastName || ''}`.trim()
+                    : tx.performedBy?.fullName || tx.performedBy?.email || 'System';
+
+                  return (
+                    <tr key={tx._id} className="hover:bg-gray-50/50">
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500">
+                        {new Date(tx.createdAt).toLocaleString('en-IN', {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-gray-900">{tx.sku}</div>
+                        <div className="text-xs text-gray-500 truncate max-w-[200px]">
+                          {tx.variantId?.productId?.name || tx.productId?.name || 'Luxury Ensemble'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <Badge variant={getBadgeVariant(txType)}>
+                          {String(txType).replace(/_/g, ' ')}
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-4 font-mono font-semibold">
+                        <span className={deltaQty > 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                          {deltaQty > 0 ? `+${deltaQty}` : deltaQty}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 font-mono font-medium text-gray-900">
+                        {balanceAfter}
+                      </td>
+                      <td className="px-6 py-4 text-xs text-gray-600 max-w-[220px]">
+                        {tx.reason || tx.referenceOrder || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 text-xs text-gray-500">
+                        {operatorName}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -261,9 +272,8 @@ export const AdminInventoryPage: React.FC = () => {
                   value={adjType}
                   onChange={(e) => setAdjType(e.target.value)}
                 >
-                  <option value="AUDIT_ADJUSTMENT">Physical Audit Count Adjustment</option>
-                  <option value="DAMAGE_WRITE_OFF">Damage / Defect Write-Off</option>
-                  <option value="THEFT_LOSS">Lost / Theft Reconciliation</option>
+                  <option value="MANUAL_ADJUSTMENT">Physical Audit Count Adjustment</option>
+                  <option value="DAMAGED_WRITEOFF">Damage / Defect Write-Off</option>
                   <option value="PURCHASE_INWARD">Manual Inward Stocking</option>
                 </select>
               </div>
